@@ -8,15 +8,29 @@ x-logging: &fluentd
     fluentd-async: "true"
 
 services:
-  demo-app:
+  worker:
     build: ./app
-    container_name: demo-app
+    container_name: worker
     logging: *fluentd
     ports:
       - "8000:8000"
     environment:
-      OTEL_SERVICE_NAME: demo-app
+      OTEL_SERVICE_NAME: worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/jobs
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    logging: *fluentd
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: jobs
+    volumes:
+      - ./configs/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
   # --- logs ---------------------------------------------------------------
   fluent-bit:
@@ -78,3 +92,6 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
     volumes:
       - ./configs/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+
+volumes:
+  pgdata:

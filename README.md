@@ -1,14 +1,16 @@
 # monitoring-stack
 
-A small observability stack for a single application: metrics, logs and
-traces, wired so that each of the three can be switched off on its own.
+A small observability stack built around a worker that never stops: it
+chews through a job queue in Postgres while metrics, logs and traces flow
+out of it. Each of the three signals can be switched off on its own.
 
 ## What's inside
 
 | Service | Role |
 |---|---|
-| **demo-app** | FastAPI app: `/metrics`, traces over OTLP, JSON logs on stdout |
-| **prometheus** | scrapes `demo-app` every 5s |
+| **worker** | claims jobs from Postgres, processes them, writes results back |
+| **postgres** | holds the `jobs` table |
+| **prometheus** | scrapes the worker every 5s |
 | **fluent-bit** | receives logs from Docker, forwards them to Loki |
 | **loki** | log storage |
 | **otel-collector** | receives traces over OTLP, forwards them to Tempo |
@@ -16,9 +18,9 @@ traces, wired so that each of the three can be switched off on its own.
 | **grafana** | all three datasources, pre-wired |
 
 ```
-metrics   prometheus ──scrape──> demo-app
+metrics   prometheus ──scrape──> worker:8000/metrics
 logs      every container ──docker fluentd driver──> fluent-bit ──> loki
-traces    demo-app ──OTLP──> otel-collector ──> tempo
+traces    worker ──OTLP──> otel-collector ──> tempo
 ```
 
 The three branches are independent — nothing in one is required by another.
@@ -29,26 +31,44 @@ The three branches are independent — nothing in one is required by another.
 docker compose up --build
 ```
 
+Nothing else to do: the worker starts producing and consuming jobs
+immediately, so there's data in Grafana within seconds.
+
 | Service | URL |
 |---|---|
-| demo-app | http://localhost:8000 |
+| worker metrics | http://localhost:8000/metrics |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 (anonymous, admin role) |
+| Postgres | `localhost:5432`, user/password/db: `postgres`/`postgres`/`jobs` |
 
-Generate some traffic:
+## How the worker works
 
-```bash
-while true; do curl -s localhost:8000/work > /dev/null; curl -s localhost:8000/error > /dev/null; sleep 1; done
-```
+A producer thread keeps adding jobs; the main loop runs a tick every two
+seconds:
 
-## Endpoints
+1. claim a batch of `pending` jobs and flip them to `processing`
+   (`FOR UPDATE SKIP LOCKED`, so several workers could run side by side)
+2. process each one — takes a moment, and fails ~5% of the time
+3. write the outcome back as `done` or `failed`
 
-| Endpoint | What it shows |
-|---|---|
-| `/` | health check |
-| `/work` | nested spans, ~0.1-0.8s latency |
-| `/error` | ~20% chance of a 500, logged at error level |
-| `/metrics` | Prometheus scrape target |
+Every tick is one trace: the batch, a span per job, and a span for each SQL
+statement underneath.
+
+Tuning knobs, all environment variables on the `worker` service:
+`BATCH_SIZE`, `TICK_SECONDS`, `FAILURE_RATE`.
+
+## Metrics
+
+| Metric | Type | What it tells you |
+|---|---|---|
+| `job_queue_depth` | gauge | how far behind the worker is |
+| `jobs_processed_total{status}` | counter | throughput, and the failure rate |
+| `jobs_produced_total` | counter | how fast work arrives |
+| `job_duration_seconds` | histogram | per-job latency |
+| `batch_duration_seconds` | histogram | how long a full tick takes |
+
+Watch the queue drain by raising `BATCH_SIZE`, or watch it grow by lowering
+it — the gauge reacts within seconds.
 
 ## Turning parts off
 
@@ -58,7 +78,7 @@ docker compose stop otel-collector tempo     # no traces
 docker compose stop prometheus               # no metrics
 ```
 
-The app keeps running in every case. Logging uses `fluentd-async`, so
+The worker keeps running in every case. Logging uses `fluentd-async`, so
 containers start and stay up even when Fluent Bit isn't there — logs are
 dropped, nothing blocks.
 
@@ -71,17 +91,20 @@ attaches `trace_id` as structured metadata.
 
 ## Correlating logs and traces
 
-Log lines the app emits inside a request carry the active `trace_id`
-(see `JsonFormatter` in `app/main.py`). In Grafana:
+Log lines the worker emits inside a tick carry the active `trace_id`
+(see `JsonFormatter` in `app/worker.py`). In Grafana:
 
 - **Logs → trace**: open a log line in Explore (Loki), click *View Trace*
 - **Trace → logs**: open a trace in Explore (Tempo), click *Logs for this span*
+
+A failed job is the shortest path through all three signals: the counter
+ticks up, the log line says which job, and the trace shows the SQL around it.
 
 ## Using it for your own app
 
 1. Point `configs/prometheus.yml` at your service and expose `/metrics`
    from it (use the Prometheus client library for your language).
 2. Send traces to `otel-collector:4317` over OTLP — with an OpenTelemetry
-   SDK, as `app/main.py` does, or via zero-code auto-instrumentation.
+   SDK, as `app/worker.py` does, or via zero-code auto-instrumentation.
 3. Log JSON to stdout including `trace_id`, add the same `logging:` block as
    the other services, and logs land in Loki with no further wiring.
