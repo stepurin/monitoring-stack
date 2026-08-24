@@ -10,7 +10,8 @@ out of it. Each of the three signals can be switched off on its own.
 |---|---|
 | **worker** | claims jobs from Postgres, processes them, writes results back |
 | **postgres** | holds the `jobs` table |
-| **prometheus** | scrapes the worker every 5s |
+| **postgres-exporter** | exposes Postgres' own metrics to Prometheus |
+| **prometheus** | scrapes the worker and the exporter every 5s |
 | **fluent-bit** | receives logs from Docker, forwards them to Loki |
 | **loki** | log storage |
 | **otel-collector** | receives traces over OTLP, forwards them to Tempo |
@@ -18,7 +19,8 @@ out of it. Each of the three signals can be switched off on its own.
 | **grafana** | all three datasources, pre-wired |
 
 ```
-metrics   prometheus ──scrape──> worker:8000/metrics
+metrics   prometheus ──scrape──┬─> worker:8000/metrics
+                               └─> postgres-exporter:9187
 logs      every container ──docker fluentd driver──> fluent-bit ──> loki
 traces    worker ──OTLP──> otel-collector ──> tempo
 ```
@@ -34,12 +36,46 @@ docker compose up --build
 Nothing else to do: the worker starts producing and consuming jobs
 immediately, so there's data in Grafana within seconds.
 
-| Service | URL |
-|---|---|
-| worker metrics | http://localhost:8000/metrics |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (anonymous, admin role) |
-| Postgres | `localhost:5432`, user/password/db: `postgres`/`postgres`/`jobs` |
+## Endpoints
+
+Only Grafana and Prometheus have a web UI. Loki and Tempo are API-only —
+you read them through Grafana's Explore tab.
+
+| Service | Endpoint | What's there |
+|---|---|---|
+| Grafana | http://localhost:3000 | UI — anonymous login, admin role |
+| Prometheus | http://localhost:9090 | UI — try `/targets` to see what's being scraped |
+| worker | http://localhost:8000/metrics | raw metrics, exactly as Prometheus sees them |
+| postgres-exporter | http://localhost:9187/metrics | Postgres' own metrics |
+| Loki | http://localhost:3100 | API — `/ready`, `/metrics`, `/loki/api/v1/query` |
+| Tempo | http://localhost:3200 | API — `/ready`, `/metrics`, `/api/traces/{id}` |
+| Fluent Bit | `localhost:24224` | forward protocol, not HTTP |
+| Postgres | `localhost:5432` | user / password / db: `postgres` / `postgres` / `jobs` |
+
+### Where to look first
+
+In Grafana, skip the dashboards and open **Explore** (the compass icon):
+
+| Datasource | Query | What you get |
+|---|---|---|
+| Prometheus | `job_queue_depth` | the queue rising and draining |
+| Prometheus | `rate(jobs_processed_total[1m])` | throughput, split by status |
+| Loki | `{container_name="worker"}` | the worker's logs |
+| Loki | `{job="docker"}` | every container's logs |
+| Tempo | Search, service `worker` | traces of individual ticks |
+
+Expand a `job N failed` line in Loki and click **View Trace** — it jumps
+straight to that job's trace, SQL statements included.
+
+Straight from the shell, without Grafana:
+
+```bash
+curl -s localhost:8000/metrics | grep job_queue_depth
+```
+
+```bash
+curl -s 'localhost:9090/api/v1/query?query=job_queue_depth' | python3 -m json.tool
+```
 
 ## How the worker works
 
@@ -70,12 +106,18 @@ Tuning knobs, all environment variables on the `worker` service:
 Watch the queue drain by raising `BATCH_SIZE`, or watch it grow by lowering
 it — the gauge reacts within seconds.
 
+Postgres reports on itself through `postgres-exporter` — connections
+(`pg_stat_activity_count`), transaction and rollback rates
+(`pg_stat_database_xact_commit`), cache hit ratio, table and index sizes.
+Handy next to the worker's own numbers: a growing queue with flat
+transaction throughput usually means the bottleneck isn't the database.
+
 ## Turning parts off
 
 ```bash
-docker compose stop fluent-bit loki          # no logs
-docker compose stop otel-collector tempo     # no traces
-docker compose stop prometheus               # no metrics
+docker compose stop fluent-bit loki                     # no logs
+docker compose stop otel-collector tempo                # no traces
+docker compose stop prometheus postgres-exporter        # no metrics
 ```
 
 The worker keeps running in every case. Logging uses `fluentd-async`, so

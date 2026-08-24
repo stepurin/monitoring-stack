@@ -71,6 +71,15 @@ services:
       - "3200:3200"
 
   # --- metrics ------------------------------------------------------------
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    container_name: postgres-exporter
+    logging: *fluentd
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:postgres@postgres:5432/jobs?sslmode=disable
+    ports:
+      - "9187:9187"
+
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: prometheus

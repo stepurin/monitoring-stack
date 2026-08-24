@@ -3,3 +3,7 @@ prometheus-client==0.20.0
 opentelemetry-sdk==1.27.0
 opentelemetry-exporter-otlp-proto-grpc==1.27.0
 opentelemetry-instrumentation-psycopg2==0.48b0
+
+# opentelemetry-instrumentation still imports pkg_resources, which Python
+# 3.12 images no longer ship and setuptools dropped in 81.
+setuptools<76
