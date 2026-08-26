@@ -4,6 +4,8 @@ A small observability stack built around a worker that never stops: it
 chews through a job queue in Postgres while metrics, logs and traces flow
 out of it. Each of the three signals can be switched off on its own.
 
+![Architecture, as explained to a five-year-old](docs/architecture.svg)
+
 ## What's inside
 
 | Service | Role |
@@ -11,16 +13,18 @@ out of it. Each of the three signals can be switched off on its own.
 | **worker** | claims jobs from Postgres, processes them, writes results back |
 | **postgres** | holds the `jobs` table |
 | **postgres-exporter** | exposes Postgres' own metrics to Prometheus |
-| **prometheus** | scrapes the worker and the exporter every 5s |
+| **prometheus** | scrapes the worker and the exporter every 5s, evaluates alert rules |
+| **alertmanager** | receives firing alerts, groups them, would notify |
 | **fluent-bit** | receives logs from Docker, forwards them to Loki |
 | **loki** | log storage |
 | **otel-collector** | receives traces over OTLP, forwards them to Tempo |
 | **tempo** | trace storage |
-| **grafana** | all three datasources, pre-wired |
+| **grafana** | all three datasources and the dashboards, pre-wired |
 
 ```
 metrics   prometheus ──scrape──┬─> worker:8000/metrics
-                               └─> postgres-exporter:9187
+                               ├─> postgres-exporter:9187
+                               └──alerts──> alertmanager
 logs      every container ──docker fluentd driver──> fluent-bit ──> loki
 traces    worker ──OTLP──> otel-collector ──> tempo
 ```
@@ -38,13 +42,14 @@ immediately, so there's data in Grafana within seconds.
 
 ## Endpoints
 
-Only Grafana and Prometheus have a web UI. Loki and Tempo are API-only —
-you read them through Grafana's Explore tab.
+Only Grafana, Prometheus and Alertmanager have a web UI. Loki and Tempo are
+API-only — you read them through Grafana.
 
 | Service | Endpoint | What's there |
 |---|---|---|
 | Grafana | http://localhost:3000 | UI — anonymous login, admin role |
-| Prometheus | http://localhost:9090 | UI — try `/targets` to see what's being scraped |
+| Prometheus | http://localhost:9090 | UI — `/targets`, `/alerts`, `/rules` |
+| Alertmanager | http://localhost:9093 | UI — alerts that are currently firing |
 | worker | http://localhost:8000/metrics | raw metrics, exactly as Prometheus sees them |
 | postgres-exporter | http://localhost:9187/metrics | Postgres' own metrics |
 | Loki | http://localhost:3100 | API — `/ready`, `/metrics`, `/loki/api/v1/query` |
@@ -52,9 +57,29 @@ you read them through Grafana's Explore tab.
 | Fluent Bit | `localhost:24224` | forward protocol, not HTTP |
 | Postgres | `localhost:5432` | user / password / db: `postgres` / `postgres` / `jobs` |
 
+## Dashboards
+
+Three dashboards are provisioned from `configs/dashboards/` — they appear in
+Grafana on first start, no import needed:
+
+| Dashboard | What it shows |
+|---|---|
+| **Worker — metrics** | queue depth, throughput by status, failure rate, job and tick latency percentiles, a latency heatmap |
+| **Logs — all containers** | log volume by level and by container, an errors-only panel, and a free-text search over everything |
+| **Traces — worker** | recent traces, traces containing a failed job, slow ticks, slow SQL |
+
+Postgres has a well-known community dashboard, so there's no point drawing
+one: in Grafana go to **Dashboards → New → Import**, enter **9628**, pick the
+Prometheus datasource, and it lights up from `postgres-exporter` data. It is
+not provisioned here because provisioning cannot fetch from grafana.com — the
+JSON has to be on disk.
+
+Edits made in the UI stick until the next restart; the files in
+`configs/dashboards/` are the source of truth.
+
 ### Where to look first
 
-In Grafana, skip the dashboards and open **Explore** (the compass icon):
+Dashboards are the guided version. **Explore** (the compass icon) is the raw one:
 
 | Datasource | Query | What you get |
 |---|---|---|
@@ -112,12 +137,45 @@ Postgres reports on itself through `postgres-exporter` — connections
 Handy next to the worker's own numbers: a growing queue with flat
 transaction throughput usually means the bottleneck isn't the database.
 
+## Alerts
+
+Rules live in `configs/alerts.yml`, Prometheus evaluates them every 15s and
+pushes what fires to Alertmanager.
+
+| Alert | Fires when |
+|---|---|
+| `WorkerDown` | `up{job="worker"} == 0` for 30s |
+| `QueueBacklog` | `job_queue_depth > 200` for 1m |
+| `HighFailureRate` | more than 20% of jobs fail, over 5m, for 2m |
+| `SlowJobs` | p99 job duration above 1s for 2m |
+| `PostgresDown` | `pg_up == 0` for 30s |
+
+To watch one fire, stop the worker:
+
+```bash
+docker compose stop worker
+```
+
+`WorkerDown` shows up as *Pending* on http://localhost:9090/alerts, turns
+*Firing* after 30s, and lands in http://localhost:9093 a few seconds later.
+
+The default receiver has no integration, so nothing leaves the machine —
+firing alerts are visible in the Alertmanager UI and nowhere else. Add a
+`slack_configs` or `webhook_configs` block in `configs/alertmanager.yml` to
+change that.
+
 ## Turning parts off
 
 ```bash
-docker compose stop fluent-bit loki                     # no logs
-docker compose stop otel-collector tempo                # no traces
-docker compose stop prometheus postgres-exporter        # no metrics
+docker compose stop fluent-bit loki                         # no logs
+```
+
+```bash
+docker compose stop otel-collector tempo                    # no traces
+```
+
+```bash
+docker compose stop prometheus alertmanager postgres-exporter   # no metrics
 ```
 
 The worker keeps running in every case. Logging uses `fluentd-async`, so
