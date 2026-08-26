@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 820" width="1240" height="820"
+     font-family="Comic Sans MS, Chalkboard SE, Marker Felt, Bradley Hand, Segoe Print, cursive">
+
+  <!-- Architecture diagram, drawn to the best of a five-year-old's ability. -->
+
+  <defs>
+    <filter id="wobble" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="turbulence" baseFrequency="0.015" numOctaves="3" seed="11" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5"
+                         xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+
+    <marker id="ah" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+      <path d="M0.5,0.5 L11,6 L0.5,11.5 L3,6 Z" fill="#495057"/>
+    </marker>
+  </defs>
+
+  <rect width="1240" height="820" fill="#fffdf3"/>
+
+  <g filter="url(#wobble)" stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- title -->
+    <text x="40" y="62" font-size="42" fill="#5c5c5c">MY MONITORING STAK</text>
+    <path d="M40,78 C 180,88 320,68 468,80" stroke="#5c5c5c" stroke-width="3" fill="none"/>
+
+    <!-- sun -->
+    <circle cx="1162" cy="58" r="36" fill="#ffe066" stroke="#f59f00" stroke-width="4"/>
+    <g stroke="#f59f00" stroke-width="4">
+      <path d="M1162,4 L1162,-14"/>
+      <path d="M1210,20 L1226,4"/>
+      <path d="M1220,58 L1240,58"/>
+      <path d="M1210,96 L1228,112"/>
+      <path d="M1162,112 L1162,132"/>
+      <path d="M1114,96 L1098,114"/>
+      <path d="M1104,58 L1084,58"/>
+      <path d="M1114,20 L1096,2"/>
+    </g>
+
+    <!-- cloud -->
+    <g fill="#ffffff" stroke="#adb5bd" stroke-width="3">
+      <circle cx="620" cy="58" r="22"/>
+      <circle cx="650" cy="46" r="28"/>
+      <circle cx="684" cy="58" r="20"/>
+      <rect x="606" y="56" width="96" height="22" rx="11"/>
+    </g>
+
+    <!-- ============================ boxes ============================ -->
+
+    <!-- worker -->
+    <rect x="60" y="150" width="220" height="120" rx="14" fill="#ffd8a8" stroke="#e8590c" stroke-width="4"/>
+    <circle cx="140" cy="178" r="4" fill="#e8590c"/>
+    <circle cx="200" cy="178" r="4" fill="#e8590c"/>
+    <path d="M136,190 Q170,208 204,190" stroke="#e8590c" stroke-width="3" fill="none"/>
+    <text x="170" y="232" font-size="30" fill="#873600" text-anchor="middle">WORKER</text>
+    <text x="170" y="256" font-size="16" fill="#873600" text-anchor="middle">it never sleeps</text>
+
+    <!-- postgres -->
+    <rect x="60" y="330" width="220" height="120" rx="14" fill="#a5d8ff" stroke="#1971c2" stroke-width="4"/>
+    <ellipse cx="170" cy="360" rx="62" ry="14" fill="none" stroke="#1971c2" stroke-width="3"/>
+    <text x="170" y="404" font-size="27" fill="#0b4a7d" text-anchor="middle">POSTGRESS</text>
+    <text x="170" y="430" font-size="16" fill="#0b4a7d" text-anchor="middle">datas live here</text>
+
+    <!-- postgres exporter -->
+    <rect x="380" y="150" width="200" height="100" rx="14" fill="#d3f9d8" stroke="#2b8a3e" stroke-width="4"/>
+    <text x="480" y="196" font-size="22" fill="#1c5b2a" text-anchor="middle">PG EXPORTR</text>
+    <text x="480" y="222" font-size="16" fill="#1c5b2a" text-anchor="middle">tells on postgres</text>
+
+    <!-- fluent bit -->
+    <rect x="380" y="330" width="200" height="100" rx="14" fill="#ffec99" stroke="#f08c00" stroke-width="4"/>
+    <text x="480" y="376" font-size="24" fill="#8a5300" text-anchor="middle">FLUENTBIT</text>
+    <text x="480" y="402" font-size="16" fill="#8a5300" text-anchor="middle">catchs the logz</text>
+
+    <!-- otel collector -->
+    <rect x="380" y="510" width="220" height="100" rx="14" fill="#eebefa" stroke="#9c36b5" stroke-width="4"/>
+    <text x="490" y="556" font-size="21" fill="#5f2470" text-anchor="middle">OTEL COLECTOR</text>
+    <text x="490" y="582" font-size="16" fill="#5f2470" text-anchor="middle">very importent</text>
+
+    <!-- prometheus -->
+    <rect x="700" y="150" width="200" height="100" rx="14" fill="#ffc9c9" stroke="#c92a2a" stroke-width="4"/>
+    <text x="800" y="196" font-size="24" fill="#7d1010" text-anchor="middle">PROMEFEUS</text>
+    <text x="800" y="222" font-size="16" fill="#7d1010" text-anchor="middle">counts things</text>
+
+    <!-- loki -->
+    <rect x="700" y="330" width="200" height="100" rx="14" fill="#b2f2bb" stroke="#2f9e44" stroke-width="4"/>
+    <text x="800" y="378" font-size="28" fill="#17612a" text-anchor="middle">LOKI</text>
+    <text x="800" y="404" font-size="16" fill="#17612a" text-anchor="middle">keeps the logz</text>
+
+    <!-- tempo -->
+    <rect x="700" y="510" width="200" height="100" rx="14" fill="#d0bfff" stroke="#6741d9" stroke-width="4"/>
+    <text x="800" y="558" font-size="26" fill="#3b2482" text-anchor="middle">TEMPO</text>
+    <text x="800" y="584" font-size="16" fill="#3b2482" text-anchor="middle">wher time goes</text>
+
+    <!-- alertmanager -->
+    <rect x="980" y="118" width="200" height="92" rx="14" fill="#ffe3e3" stroke="#c92a2a" stroke-width="4"/>
+    <text x="1080" y="158" font-size="19" fill="#7d1010" text-anchor="middle">ALERTMANAGR</text>
+    <text x="1080" y="184" font-size="16" fill="#7d1010" text-anchor="middle">yells at u</text>
+
+    <!-- grafana -->
+    <rect x="980" y="290" width="200" height="200" rx="14" fill="#ffe8cc" stroke="#e8590c" stroke-width="4"/>
+    <text x="1080" y="336" font-size="28" fill="#873600" text-anchor="middle">GRAFANA</text>
+    <path d="M1005,432 L1035,398 L1062,424 L1092,372 L1152,392"
+          stroke="#e8590c" stroke-width="4" fill="none"/>
+    <text x="1080" y="468" font-size="16" fill="#873600" text-anchor="middle">prity picturs</text>
+
+    <!-- ============================ arrows ============================ -->
+
+    <g stroke="#495057" stroke-width="3.5" fill="none" marker-end="url(#ah)">
+      <!-- worker -> prometheus, the long way round -->
+      <path d="M170,150 L170,112 L798,112 L800,148"/>
+      <!-- worker -> fluent bit -->
+      <path d="M282,244 L376,348"/>
+      <!-- worker -> otel collector -->
+      <path d="M282,266 L376,536"/>
+      <!-- postgres -> pg exporter -->
+      <path d="M282,358 L374,244"/>
+      <!-- pg exporter -> prometheus -->
+      <path d="M582,200 L696,200"/>
+      <!-- fluent bit -> loki -->
+      <path d="M582,380 L696,380"/>
+      <!-- otel -> tempo -->
+      <path d="M602,560 L696,560"/>
+      <!-- prometheus -> alertmanager -->
+      <path d="M902,176 L976,168"/>
+      <!-- prometheus -> grafana -->
+      <path d="M902,218 L976,318"/>
+      <!-- loki -> grafana -->
+      <path d="M902,382 L976,386"/>
+      <!-- tempo -> grafana -->
+      <path d="M902,542 L976,472"/>
+      <!-- worker <-> postgres, both ways -->
+      <path d="M158,272 L158,326"/>
+      <path d="M184,326 L184,272"/>
+    </g>
+
+    <!-- arrow labels -->
+    <text x="404" y="104" font-size="19" fill="#c92a2a">metriks</text>
+    <text x="600" y="188" font-size="16" fill="#c92a2a" text-anchor="middle">more metriks</text>
+    <text x="292" y="316" font-size="19" fill="#f08c00">logz</text>
+    <text x="286" y="470" font-size="19" fill="#9c36b5">trases</text>
+    <text x="196" y="306" font-size="16" fill="#1971c2">jobs</text>
+    <text x="300" y="292" font-size="15" fill="#1971c2">sql stuf</text>
+
+    <!-- ============================ me ============================ -->
+
+    <circle cx="1080" cy="566" r="27" fill="#fff3bf" stroke="#495057" stroke-width="3.5"/>
+    <circle cx="1071" cy="560" r="3.5" fill="#495057"/>
+    <circle cx="1090" cy="560" r="3.5" fill="#495057"/>
+    <path d="M1066,574 Q1080,588 1094,574" stroke="#495057" stroke-width="3" fill="none"/>
+    <g stroke="#495057" stroke-width="3.5" fill="none">
+      <path d="M1080,593 L1080,656"/>
+      <path d="M1040,618 L1120,606"/>
+      <path d="M1080,656 L1054,706"/>
+      <path d="M1080,656 L1108,706"/>
+      <path d="M1080,536 L1080,498" marker-end="url(#ah)"/>
+    </g>
+    <text x="672" y="678" font-size="22" fill="#495057">WOW I SEE EVRYTHING</text>
+    <path d="M956,668 Q1010,660 1046,634" stroke="#495057" stroke-width="2.5" fill="none"/>
+
+    <!-- ============================ grass ============================ -->
+
+    <path d="M20,762 C 160,752 300,772 460,760 C 620,748 780,770 940,760 C 1060,752 1160,766 1224,758"
+          stroke="#40c057" stroke-width="4" fill="none"/>
+
+    <g stroke="#40c057" stroke-width="3.5" fill="none">
+      <path d="M120,758 L120,712"/>
+      <path d="M300,762 L300,720"/>
+      <path d="M520,758 L520,716"/>
+    </g>
+    <g stroke="#f06595" stroke-width="3.5" fill="#ffdeeb">
+      <circle cx="120" cy="700" r="15"/>
+      <circle cx="300" cy="708" r="13"/>
+      <circle cx="520" cy="704" r="14"/>
+    </g>
+    <g fill="#fab005">
+      <circle cx="120" cy="700" r="5"/>
+      <circle cx="300" cy="708" r="5"/>
+      <circle cx="520" cy="704" r="5"/>
+    </g>
+
+    <text x="40" y="800" font-size="19" fill="#868e96">3 pipes. u can switch off eny 1 and the rest keep going. mom says thats called MODULAR</text>
+
+  </g>
+</svg>
