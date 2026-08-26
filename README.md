@@ -59,7 +59,7 @@ API-only — you read them through Grafana.
 
 ## Dashboards
 
-Three dashboards are provisioned from `configs/dashboards/` — they appear in
+Four dashboards are provisioned from `configs/dashboards/` — they appear in
 Grafana on first start, no import needed:
 
 | Dashboard | What it shows |
@@ -67,15 +67,19 @@ Grafana on first start, no import needed:
 | **Worker — metrics** | queue depth, throughput by status, failure rate, job and tick latency percentiles, a latency heatmap |
 | **Logs — all containers** | log volume by level and by container, an errors-only panel, and a free-text search over everything |
 | **Traces — worker** | recent traces, traces containing a failed job, slow ticks, slow SQL |
+| **Postgres — database (9628)** | connections, transactions, tuples, locks, bgwriter, cache hit ratio, settings |
 
-Postgres has a well-known community dashboard, so there's no point drawing
-one: in Grafana go to **Dashboards → New → Import**, enter **9628**, pick the
-Prometheus datasource, and it lights up from `postgres-exporter` data. It is
-not provisioned here because provisioning cannot fetch from grafana.com — the
-JSON has to be on disk.
+The Postgres one is [dashboard 9628](https://grafana.com/grafana/dashboards/9628-postgresql-database/)
+from grafana.com, adapted: it ships for the Helm chart, so it expects
+`kubernetes_namespace` and `release` labels that a plain Docker exporter never
+sets. The `namespace` and `release` variables are gone, the `release="$release"`
+filter is stripped from the eight queries that carried it, and `instance` and
+`datname` are resolved with `label_values` instead of Kubernetes-shaped
+`query_result` regexes.
 
 Edits made in the UI stick until the next restart; the files in
-`configs/dashboards/` are the source of truth.
+`configs/dashboards/` are the source of truth. The provider re-reads the
+directory every 15s, so dropping a new JSON in there is enough — no restart.
 
 ### Where to look first
 
