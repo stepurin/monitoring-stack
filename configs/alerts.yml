@@ -1,0 +1,52 @@
+groups:
+  - name: worker
+    rules:
+      # up == 0 means Prometheus could not scrape the target at all.
+      - alert: WorkerDown
+        expr: up{job="worker"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker is not being scraped"
+          description: "Prometheus has not reached worker:8000/metrics for 30s. The queue is not being drained."
+
+      - alert: QueueBacklog
+        expr: job_queue_depth > 200
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job queue is backing up"
+          description: "job_queue_depth has been above 200 for a minute — jobs arrive faster than the worker finishes them. Raise BATCH_SIZE or lower TICK_SECONDS."
+
+      - alert: HighFailureRate
+        expr: |
+          sum(rate(jobs_processed_total{status="failed"}[5m]))
+            / sum(rate(jobs_processed_total[5m])) > 0.2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 20% of jobs are failing"
+          description: "Expected failure rate is FAILURE_RATE (5% by default). Check the traces of failed jobs in Tempo."
+
+      - alert: SlowJobs
+        expr: histogram_quantile(0.99, sum by (le) (rate(job_duration_seconds_bucket[5m]))) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 job duration above 1s"
+          description: "Processing normally takes 50–300 ms. Something is holding jobs up."
+
+  - name: postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "postgres-exporter cannot reach Postgres"
+          description: "pg_up is 0 — either the database is down or the exporter's credentials are wrong."

@@ -1,0 +1,26 @@
+route:
+  receiver: default
+  group_by: [alertname]
+  group_wait: 5s
+  group_interval: 15s
+  repeat_interval: 1h
+
+receivers:
+  # No integration on purpose: firing alerts show up in the Alertmanager UI
+  # at http://localhost:9093 without anything leaving the machine.
+  #
+  # To actually notify somewhere, add one of these to the receiver:
+  #
+  #   slack_configs:
+  #     - api_url: https://hooks.slack.com/services/...
+  #       channel: "#alerts"
+  #
+  #   webhook_configs:
+  #     - url: http://your-service:8080/alerts
+  - name: default
+
+inhibit_rules:
+  # While the worker is down, a growing queue is a symptom, not news.
+  - source_matchers: [alertname="WorkerDown"]
+    target_matchers: [alertname="QueueBacklog"]
+    equal: [severity]

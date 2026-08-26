@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: monitoring-stack
+    type: file
+    # Dashboards stay editable in the UI; edits are lost on restart, since the
+    # files on disk are the source of truth.
+    allowUiUpdates: true
+    updateIntervalSeconds: 15
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
