@@ -1,0 +1,97 @@
+{
+  "uid": "stack-traces",
+  "title": "Traces — worker",
+  "tags": ["monitoring-stack", "traces"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "How to read this",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "Every tick of the worker is one trace:\n\n- `tick` — the whole batch\n- `process-job` — one job\n- `SELECT` / `UPDATE` — one SQL statement\n\nClick any row to open the trace. From a span, **Logs for this span** jumps to the matching lines in Loki.\n\nTempo has no dashboard-friendly aggregates here — the tables below are TraceQL searches, the same ones you would run in Explore."
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Recent traces",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 0 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"worker\"}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Traces with a failed job",
+      "description": "TraceQL filters on span attributes — job.failed is set in app/worker.py.",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"worker\" && span.job.failed=true}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Slow ticks (> 1s)",
+      "description": "Duration filters are the fastest way to find the ticks worth opening.",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"worker\" && name=\"tick\" && duration > 1s}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Slow SQL (> 100ms)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{resource.service.name=\"worker\" && span.db.system=\"postgresql\" && duration > 100ms}",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    }
+  ]
+}
