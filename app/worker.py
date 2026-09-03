@@ -64,6 +64,13 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload)
 
 
+# Logging goes first: instrument() below reports failure by logging rather
+# than raising, and anything logged before this line escapes the JSON format
+# and never reaches Loki.
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
+
 tracer_provider = TracerProvider(resource=Resource.create({"service.name": SERVICE_NAME}))
 tracer_provider.add_span_processor(
     BatchSpanProcessor(OTLPSpanExporter(endpoint=OTLP_ENDPOINT, insecure=True))
@@ -72,11 +79,13 @@ trace.set_tracer_provider(tracer_provider)
 
 # Wraps every SQL statement in its own span, so a trace shows the actual
 # queries and how long each took.
-Psycopg2Instrumentor().instrument()
-
-_handler = logging.StreamHandler(sys.stdout)
-_handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
+#
+# skip_dep_check is required, not optional: the instrumentation declares
+# `psycopg2 >= 2.7.3.1`, and we install psycopg2-binary — a different
+# distribution name. The check therefore fails, and instrument() would log
+# a DependencyConflict and return without patching anything, leaving traces
+# silently free of SQL spans. The driver itself is identical.
+Psycopg2Instrumentor().instrument(skip_dep_check=True)
 
 logger = logging.getLogger(SERVICE_NAME)
 tracer = trace.get_tracer(SERVICE_NAME)

@@ -78,14 +78,15 @@
     {
       "id": 5,
       "type": "table",
-      "title": "Slow SQL (> 100ms)",
+      "title": "Slow SQL (> 5ms)",
+      "description": "5ms, not 100ms: these statements run against a local Postgres and finish in single-digit milliseconds. A 100ms threshold would leave this panel permanently empty.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
       "datasource": { "type": "tempo", "uid": "tempo" },
       "targets": [
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"worker\" && span.db.system=\"postgresql\" && duration > 100ms}",
+          "query": "{resource.service.name=\"worker\" && span.db.system=\"postgresql\" && duration > 5ms}",
           "limit": 20,
           "tableType": "traces"
         }
