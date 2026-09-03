@@ -7,9 +7,24 @@ route:
 
 receivers:
   # No integration on purpose: firing alerts show up in the Alertmanager UI
-  # at http://localhost:9093 without anything leaving the machine.
+  # at http://localhost:9093 without anything leaving the machine, and the
+  # stack runs without you having to hold any credentials.
   #
-  # To actually notify somewhere, add one of these to the receiver:
+  # Telegram is the least ceremony for a personal project: talk to @BotFather
+  # for a token, then to @userinfobot for your chat id. Uncomment, fill in the
+  # two values, and `docker compose restart alertmanager`.
+  #
+  #   telegram_configs:
+  #     - bot_token: "123456789:AA..."
+  #       chat_id: 123456789
+  #       parse_mode: HTML
+  #       message: |
+  #         <b>{{ .Status | toUpper }}</b> {{ .CommonLabels.alertname }}
+  #         {{ range .Alerts }}{{ .Annotations.summary }}
+  #         {{ .Annotations.description }}
+  #         {{ end }}
+  #
+  # Slack and anything else speaking HTTP work the same way:
   #
   #   slack_configs:
   #     - api_url: https://hooks.slack.com/services/...

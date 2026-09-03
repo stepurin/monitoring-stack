@@ -40,6 +40,11 @@ docker compose up --build
 Nothing else to do: the worker starts producing and consuming jobs
 immediately, so there's data in Grafana within seconds.
 
+First time, or something didn't come up?
+[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through the run and
+what to check; [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is organised
+by symptom.
+
 ## Endpoints
 
 Only Grafana, Prometheus and Alertmanager have a web UI. Loki and Tempo are
@@ -164,9 +169,9 @@ docker compose stop worker
 *Firing* after 30s, and lands in http://localhost:9093 a few seconds later.
 
 The default receiver has no integration, so nothing leaves the machine —
-firing alerts are visible in the Alertmanager UI and nowhere else. Add a
-`slack_configs` or `webhook_configs` block in `configs/alertmanager.yml` to
-change that.
+firing alerts are visible in the Alertmanager UI and nowhere else. To change
+that, uncomment `telegram_configs` in `configs/alertmanager.yml` and fill in a
+bot token and chat id; `slack_configs` and `webhook_configs` are there too.
 
 ## Turning parts off
 
