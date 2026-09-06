@@ -92,12 +92,7 @@ red, its container is not up.
 Four of them, provisioned from the repository — nothing to import. No login:
 anonymous access is on, with admin rights.
 
-Open **my_service — metrics**. Queue depth climbing steadily rather than
-sitting flat is *expected* — the repository ships one deliberate bug, and that
-is its symptom. See [DEMO.md](DEMO.md) when you want the answer; the whole
-investigation is the point of the stack.
-
-The rest reads normally: throughput a few jobs per
+Open **my_service — metrics**. Queue depth near zero, throughput a few jobs per
 second, failure rate around 5%. That 5% is deliberate — the service fails jobs
 on purpose so there is something to look at.
 
@@ -129,7 +124,7 @@ BATCH_SIZE=1 docker compose up -d my_service
 ```
 
 The producer still adds up to five jobs a second while the service now takes
-one per tick. Watch `job_queue_depth` climb on the dashboard. Put it
+one every two seconds. Watch `job_queue_depth` climb on the dashboard. Put it
 back with:
 
 ```bash

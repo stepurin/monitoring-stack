@@ -40,16 +40,6 @@ docker compose up --build
 Nothing else to do: my_service starts producing and consuming jobs
 immediately, so there's data in Grafana within seconds.
 
-### One thing is broken on purpose
-
-`job_queue_depth` will climb rather than sit flat, and nothing in the logs
-will say why. That is deliberate: the repository ships a single seeded bug so
-there is a real problem to investigate, not just dashboards to admire. It is
-found by following metric → log → trace → SQL, and fixed with a two-line diff.
-
-[docs/DEMO.md](docs/DEMO.md) is the walkthrough — and it gives the answer away,
-so don't open it in front of an audience you want to let solve it.
-
 First time, or something didn't come up?
 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through the run and
 what to check; [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) is organised

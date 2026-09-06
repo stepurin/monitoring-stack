@@ -30,10 +30,7 @@ DSN = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/jo
 
 METRICS_PORT = int(os.getenv("METRICS_PORT", "8000"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
-# One second, not two: a batch of 10 takes ~1.75s of work, so a 2s pause
-# left throughput below what the producer generates and the queue crept
-# up even when nothing was wrong.
-TICK_SECONDS = float(os.getenv("TICK_SECONDS", "1"))
+TICK_SECONDS = float(os.getenv("TICK_SECONDS", "2"))
 FAILURE_RATE = float(os.getenv("FAILURE_RATE", "0.05"))
 
 
@@ -184,10 +181,9 @@ def finish_job(connection, job_id: int, status: str, result: str | None) -> None
 
 
 def count_pending(connection) -> int:
-    """How many jobs are still waiting. Feeds the job_queue_depth gauge."""
     with connection.cursor() as cursor:
-        cursor.execute("SELECT status FROM jobs")
-        return sum(1 for (status,) in cursor.fetchall() if status == "pending")
+        cursor.execute("SELECT count(*) FROM jobs WHERE status = 'pending'")
+        return cursor.fetchone()[0]
 
 
 # --- work -------------------------------------------------------------------
