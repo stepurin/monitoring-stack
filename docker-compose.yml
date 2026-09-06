@@ -23,6 +23,9 @@ services:
     image: postgres:16-alpine
     container_name: postgres
     logging: *fluentd
+    # A laptop-sized ceiling. The default of 100 assumes a server with room
+    # for a hundred backends; ten containers on a dev machine do not need it.
+    command: ["postgres", "-c", "max_connections=30"]
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: jobs

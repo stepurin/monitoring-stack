@@ -139,6 +139,48 @@ def connect(retries: int = 30) -> psycopg2.extensions.connection:
     raise RuntimeError("unreachable")
 
 
+# A pool, so that the tick and the producer thread don't have to open a
+# connection each time they need one. Opening one costs a round trip and a
+# backend process on the Postgres side, and Postgres hands out only
+# max_connections of those in total — a connection is something you borrow
+# and give back, not something you can keep making.
+_pool: list[psycopg2.extensions.connection] = []
+_pool_lock = threading.Lock()
+_in_use: set[int] = set()
+
+
+def acquire() -> psycopg2.extensions.connection:
+    """Hand out a free connection, opening a new one if there isn't one.
+
+    The span is half the point. psycopg2 instrumentation traces statements,
+    not the wait for something to run them on, so without it a tick that
+    spends its time queueing for a connection looks like a slow tick with
+    nothing slow inside it. pool.size and pool.reused answer the question
+    that follows: is the pool actually pooling, or just opening?
+    """
+    with tracer.start_as_current_span("pool-acquire") as span:
+        with _pool_lock:
+            connection = next(
+                (c for c in _pool if id(c) not in _in_use and not c.closed), None
+            )
+            span.set_attribute("pool.reused", connection is not None)
+
+            if connection is None:
+                connection = connect()
+                _pool.append(connection)
+
+            _in_use.add(id(connection))
+            span.set_attribute("pool.size", len(_pool))
+            span.set_attribute("pool.in_use", len(_in_use))
+            return connection
+
+
+def release(connection: psycopg2.extensions.connection) -> None:
+    """Put a connection back, so the next caller can have it."""
+    with _pool_lock:
+        _in_use.discard(id(connection))
+
+
 def claim_batch(connection, size: int) -> list[tuple[int, str]]:
     """Grab a batch of pending jobs and mark them as in flight.
 
@@ -201,22 +243,33 @@ def process(payload: str) -> str:
 
 def produce_forever() -> None:
     """Keeps the queue fed so the service always has something to do."""
-    connection = connect()
-
     while True:
         count = random.randint(1, 5)
+
         with tracer.start_as_current_span("produce"):
-            with connection.cursor() as cursor:
-                cursor.executemany(
-                    "INSERT INTO jobs (payload) VALUES (%s)",
-                    [(f"task-{random.randint(1000, 9999)}",) for _ in range(count)],
-                )
+            connection = acquire()
+
+            try:
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "INSERT INTO jobs (payload) VALUES (%s)",
+                        [(f"task-{random.randint(1000, 9999)}",) for _ in range(count)],
+                    )
+            finally:
+                # Even if the insert raised: a connection that is never given
+                # back is one the pool can never hand out again.
+                release(connection)
+
         JOBS_PRODUCED.inc(count)
         time.sleep(1)
 
 
-def run_tick(connection) -> int:
+def run_tick() -> int:
     with tracer.start_as_current_span("tick") as tick:
+        # Inside the span, not before it: the wait for a connection is part of
+        # the tick, and anything logged during that wait inherits the tick's
+        # trace id — which is what lets a log line link back to its trace.
+        connection = acquire()
         jobs = claim_batch(connection, BATCH_SIZE)
         tick.set_attribute("batch.size", len(jobs))
 
@@ -245,13 +298,14 @@ def main() -> None:
     start_http_server(METRICS_PORT)
     logger.info(f"metrics served on :{METRICS_PORT}")
 
-    connection = connect()
+    # Wait for Postgres to accept a connection before starting the producer.
+    release(acquire())
     threading.Thread(target=produce_forever, daemon=True).start()
     logger.info("service started")
 
     while True:
         start = time.perf_counter()
-        processed = run_tick(connection)
+        processed = run_tick()
         BATCH_DURATION.observe(time.perf_counter() - start)
 
         if processed:
