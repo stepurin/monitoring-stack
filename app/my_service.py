@@ -163,13 +163,23 @@ def acquire() -> psycopg2.extensions.connection:
             connection = next(
                 (c for c in _pool if id(c) not in _in_use and not c.closed), None
             )
-            span.set_attribute("pool.reused", connection is not None)
 
-            if connection is None:
-                connection = connect()
-                _pool.append(connection)
+            if connection is not None:
+                _in_use.add(id(connection))
+                span.set_attribute("pool.reused", True)
+                span.set_attribute("pool.size", len(_pool))
+                span.set_attribute("pool.in_use", len(_in_use))
+                return connection
 
+        # Opening a connection is slow and can retry for a while. Holding the
+        # pool lock across it would stall every other caller, including the
+        # ones that only wanted a connection the pool already has.
+        connection = connect()
+
+        with _pool_lock:
+            _pool.append(connection)
             _in_use.add(id(connection))
+            span.set_attribute("pool.reused", False)
             span.set_attribute("pool.size", len(_pool))
             span.set_attribute("pool.in_use", len(_in_use))
             return connection
@@ -228,6 +238,16 @@ def count_pending(connection) -> int:
         return cursor.fetchone()[0]
 
 
+def measure_backlog() -> int:
+    """Read the queue depth on a connection of its own.
+
+    The tick holds its connection for the whole batch, and this is only a
+    gauge — no reason to make it wait for the batch to finish.
+    """
+    with tracer.start_as_current_span("measure-backlog"):
+        return count_pending(acquire())
+
+
 # --- work -------------------------------------------------------------------
 
 
@@ -270,27 +290,33 @@ def run_tick() -> int:
         # the tick, and anything logged during that wait inherits the tick's
         # trace id — which is what lets a log line link back to its trace.
         connection = acquire()
-        jobs = claim_batch(connection, BATCH_SIZE)
-        tick.set_attribute("batch.size", len(jobs))
 
-        for job_id, payload in jobs:
-            with tracer.start_as_current_span("process-job") as span:
-                span.set_attribute("job.id", job_id)
-                start = time.perf_counter()
+        try:
+            jobs = claim_batch(connection, BATCH_SIZE)
+            tick.set_attribute("batch.size", len(jobs))
 
-                try:
-                    result = process(payload)
-                    finish_job(connection, job_id, "done", result)
-                    JOBS_PROCESSED.labels("done").inc()
-                except RuntimeError:
-                    finish_job(connection, job_id, "failed", None)
-                    JOBS_PROCESSED.labels("failed").inc()
-                    span.set_attribute("job.failed", True)
-                    logger.error(f"job {job_id} failed")
-                finally:
-                    JOB_DURATION.observe(time.perf_counter() - start)
+            for job_id, payload in jobs:
+                with tracer.start_as_current_span("process-job") as span:
+                    span.set_attribute("job.id", job_id)
+                    start = time.perf_counter()
 
-        QUEUE_DEPTH.set(count_pending(connection))
+                    try:
+                        result = process(payload)
+                        finish_job(connection, job_id, "done", result)
+                        JOBS_PROCESSED.labels("done").inc()
+                    except RuntimeError:
+                        finish_job(connection, job_id, "failed", None)
+                        JOBS_PROCESSED.labels("failed").inc()
+                        span.set_attribute("job.failed", True)
+                        logger.error(f"job {job_id} failed")
+                    finally:
+                        JOB_DURATION.observe(time.perf_counter() - start)
+
+            QUEUE_DEPTH.set(measure_backlog())
+        finally:
+            # However the batch went, the pool gets its connection back.
+            release(connection)
+
         return len(jobs)
 
 
