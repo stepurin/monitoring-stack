@@ -245,7 +245,12 @@ def measure_backlog() -> int:
     gauge — no reason to make it wait for the batch to finish.
     """
     with tracer.start_as_current_span("measure-backlog"):
-        return count_pending(acquire())
+        connection = acquire()
+
+        try:
+            return count_pending(connection)
+        finally:
+            release(connection)
 
 
 # --- work -------------------------------------------------------------------
