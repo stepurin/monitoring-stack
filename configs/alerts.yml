@@ -1,15 +1,15 @@
 groups:
-  - name: worker
+  - name: my_service
     rules:
       # up == 0 means Prometheus could not scrape the target at all.
-      - alert: WorkerDown
-        expr: up{job="worker"} == 0
+      - alert: MyServiceDown
+        expr: up{job="my_service"} == 0
         for: 30s
         labels:
           severity: critical
         annotations:
-          summary: "Worker is not being scraped"
-          description: "Prometheus has not reached worker:8000/metrics for 30s. The queue is not being drained."
+          summary: "my_service is not being scraped"
+          description: "Prometheus has not reached my_service:8000/metrics for 30s. The queue is not being drained."
 
       - alert: QueueBacklog
         expr: job_queue_depth > 200
@@ -18,7 +18,7 @@ groups:
           severity: warning
         annotations:
           summary: "Job queue is backing up"
-          description: "job_queue_depth has been above 200 for a minute — jobs arrive faster than the worker finishes them. Raise BATCH_SIZE or lower TICK_SECONDS."
+          description: "job_queue_depth has been above 200 for a minute — jobs arrive faster than my_service finishes them. Raise BATCH_SIZE or lower TICK_SECONDS."
 
       - alert: HighFailureRate
         expr: |

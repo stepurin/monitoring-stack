@@ -28,7 +28,7 @@ Prometheus each want a few hundred megabytes once data starts flowing.
 | 3100 | Loki |
 | 3200 | Tempo |
 | 5432 | Postgres |
-| 8000 | worker metrics |
+| 8000 | my_service metrics |
 | 9090 | Prometheus |
 | 9093 | Alertmanager |
 | 9187 | postgres-exporter |
@@ -76,7 +76,7 @@ Then the shortest end-to-end proof, which needs nothing but curl:
 curl -s localhost:8000/metrics | grep job_queue_depth
 ```
 
-A number means the worker is alive, connected to Postgres and counting.
+A number means the service is alive, connected to Postgres and counting.
 
 ## The first sixty seconds
 
@@ -84,29 +84,34 @@ Everything below has data within a minute of starting. In this order:
 
 **1. Prometheus is scraping** — http://localhost:9090/targets
 
-Three targets, all green: `prometheus`, `worker`, `postgres`. If `worker` is
-red, the worker container is not up.
+Three targets, all green: `prometheus`, `my_service`, `postgres`. If `my_service` is
+red, its container is not up.
 
 **2. The dashboards are there** — http://localhost:3000/dashboards
 
 Four of them, provisioned from the repository — nothing to import. No login:
 anonymous access is on, with admin rights.
 
-Open **Worker — metrics**. Queue depth near zero, throughput a few jobs per
-second, failure rate around 5%. That 5% is deliberate — the worker fails jobs
+Open **my_service — metrics**. Queue depth climbing steadily rather than
+sitting flat is *expected* — the repository ships one deliberate bug, and that
+is its symptom. See [DEMO.md](DEMO.md) when you want the answer; the whole
+investigation is the point of the stack.
+
+The rest reads normally: throughput a few jobs per
+second, failure rate around 5%. That 5% is deliberate — the service fails jobs
 on purpose so there is something to look at.
 
 **3. Logs are arriving** — Grafana → Explore → Loki datasource:
 
 ```
-{container_name="worker"}
+{container_name="my_service"}
 ```
 
 JSON lines, roughly one per tick. If this is empty, the logging branch is the
 thing to debug; the other two are unaffected.
 
 **4. Traces are arriving** — Grafana → Explore → Tempo → Search, service
-`worker`. Open any trace: `tick` at the top, `process-job` under it, SQL
+`my_service`. Open any trace: `tick` at the top, `process-job` under it, SQL
 statements under those.
 
 **5. The whole point** — Grafana → Dashboards → **Logs — all containers** →
@@ -117,21 +122,21 @@ the three signals are for.
 
 ## Make something happen
 
-The queue is boring when the worker keeps up. Starve it:
+The queue is boring when the service keeps up. Starve it:
 
 ```bash
-BATCH_SIZE=1 docker compose up -d worker
+BATCH_SIZE=1 docker compose up -d my_service
 ```
 
-The producer still adds up to five jobs a second while the worker now takes
-one every two seconds. Watch `job_queue_depth` climb on the dashboard. Put it
+The producer still adds up to five jobs a second while the service now takes
+one per tick. Watch `job_queue_depth` climb on the dashboard. Put it
 back with:
 
 ```bash
-docker compose up -d worker
+docker compose up -d my_service
 ```
 
-Other knobs on the `worker` service: `TICK_SECONDS`, `FAILURE_RATE`.
+Other knobs on the `my_service` service: `TICK_SECONDS`, `FAILURE_RATE`.
 
 ## Stopping
 

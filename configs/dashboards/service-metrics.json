@@ -1,6 +1,6 @@
 {
-  "uid": "worker-metrics",
-  "title": "Worker — metrics",
+  "uid": "service-metrics",
+  "title": "my_service — metrics",
   "tags": ["monitoring-stack", "metrics"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -13,7 +13,7 @@
       "id": 1,
       "type": "stat",
       "title": "Queue depth",
-      "description": "Jobs sitting in 'pending'. Rises when the producer outruns the worker.",
+      "description": "Jobs sitting in 'pending'. Rises when the producer outruns the service.",
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [

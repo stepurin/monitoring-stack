@@ -35,7 +35,7 @@ receivers:
   - name: default
 
 inhibit_rules:
-  # While the worker is down, a growing queue is a symptom, not news.
-  - source_matchers: [alertname="WorkerDown"]
+  # While my_service is down, a growing queue is a symptom, not news.
+  - source_matchers: [alertname="MyServiceDown"]
     target_matchers: [alertname="QueueBacklog"]
     equal: [severity]

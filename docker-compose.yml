@@ -8,14 +8,14 @@ x-logging: &fluentd
     fluentd-async: "true"
 
 services:
-  worker:
+  my_service:
     build: ./app
-    container_name: worker
+    container_name: my_service
     logging: *fluentd
     ports:
       - "8000:8000"
     environment:
-      OTEL_SERVICE_NAME: worker
+      OTEL_SERVICE_NAME: my_service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/jobs
 

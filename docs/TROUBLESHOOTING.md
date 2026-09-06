@@ -7,7 +7,7 @@ the likely causes in the order they're worth checking.
 |---|---|
 | A container keeps restarting | [Crash loops](#a-container-keeps-restarting) |
 | `docker compose up` fails on a port | [Port already in use](#port-already-in-use) |
-| Worker logs say Postgres isn't ready | [Worker can't reach Postgres](#worker-cant-reach-postgres) |
+| Startup says Postgres isn't ready | [my_service can't reach Postgres](#my_service-cant-reach-postgres) |
 | Prometheus target is red | [A scrape target is down](#a-scrape-target-is-down) |
 | Dashboards are missing in Grafana | [No dashboards](#no-dashboards-in-grafana) |
 | Panels are there but empty | [Empty panels](#panels-render-but-are-empty) |
@@ -28,7 +28,7 @@ docker compose logs --tail=50 <service>
 ```
 
 Between them they explain most failures. Service names are the keys in
-`docker-compose.yml`: `worker`, `postgres`, `postgres-exporter`, `prometheus`,
+`docker-compose.yml`: `my_service`, `postgres`, `postgres-exporter`, `prometheus`,
 `alertmanager`, `fluent-bit`, `loki`, `otel-collector`, `tempo`, `grafana`.
 
 ---
@@ -36,13 +36,13 @@ Between them they explain most failures. Service names are the keys in
 ## A container keeps restarting
 
 ```bash
-docker compose logs --tail=50 worker
+docker compose logs --tail=50 my_service
 ```
 
 `Restarting` in `ps` means the process exits and Docker starts it again. The
 logs from just before the exit say why.
 
-- **A config file has a syntax error.** Everything except the worker mounts
+- **A config file has a syntax error.** Every service except my_service mounts
   its config read-only from `configs/`; a bad line there kills the process on
   startup. The log names the file and usually the line.
 - **The mounted file isn't there.** If you renamed or moved something under
@@ -71,14 +71,14 @@ containers talk to each other by service name.
 5432 (a local Postgres) and 3000 (any other dev server) are the usual
 offenders.
 
-## Worker can't reach Postgres
+## my_service can't reach Postgres
 
 ```bash
-docker compose logs --tail=20 worker
+docker compose logs --tail=20 my_service
 ```
 
 `postgres not ready, retrying (3/30)` on startup is **normal** — there is no
-`depends_on` anywhere in this stack, so the worker may well start first. It
+`depends_on` anywhere in this stack, so my_service may well start first. It
 retries once a second, thirty times, and Postgres is usually up within ten.
 
 It is a problem when the counter runs to 30 and the container exits:
@@ -89,7 +89,7 @@ docker compose logs --tail=30 postgres
 
 - Postgres failed to initialise — most often a leftover volume from an older
   run with different credentials. `docker compose down -v` wipes it.
-- The database name doesn't match. `DATABASE_URL` on the worker ends in
+- The database name doesn't match. `DATABASE_URL` on my_service ends in
   `/jobs`, and `POSTGRES_DB` on Postgres must say `jobs` too.
 
 ## A scrape target is down
@@ -97,7 +97,7 @@ docker compose logs --tail=30 postgres
 http://localhost:9090/targets shows the error next to the target — it is
 almost always more specific than anything you'd guess.
 
-- **`worker` down** — the worker container isn't running. Check its logs.
+- **`my_service` down** — the container isn't running. Check its logs.
 - **`postgres` down** — that's `postgres-exporter`, not the database. Usually
   the exporter is up but can't authenticate; check its logs:
 
@@ -188,10 +188,10 @@ If Fluent Bit was down when a container started, that container's logs are
 gone for good. Restart it:
 
 ```bash
-docker compose restart worker
+docker compose restart my_service
 ```
 
-One consequence worth knowing: `docker compose logs worker` shows nothing for
+One consequence worth knowing: `docker compose logs my_service` shows nothing for
 services using the fluentd driver, because their output went to Fluent Bit
 instead of Docker's own log store. Read them in Grafana, not in the terminal.
 
@@ -201,7 +201,7 @@ instead of Docker's own log store. Read them in Grafana, not in the terminal.
 docker compose logs --tail=30 otel-collector
 ```
 
-- **Nothing arriving** — the worker can't reach the collector. Its
+- **Nothing arriving** — the service can't reach the collector. Its
   `OTEL_EXPORTER_OTLP_ENDPOINT` must be `http://otel-collector:4317`; the
   collector must be up.
 - **Arriving but not forwarded** — errors mentioning `tempo` in the collector
@@ -235,7 +235,7 @@ curl -s localhost:9090/api/v1/rules | python3 -m json.tool | head -40
   `rule_files` in `configs/prometheus.yml` and that the file is mounted.
 - **Rules listed, state `inactive`** — the condition simply isn't true.
   `QueueBacklog` needs the queue above 200, which won't happen while the
-  worker keeps up; starve it with `BATCH_SIZE=1` first.
+  my_service keeps up; starve it with `BATCH_SIZE=1` first.
 - **Firing in Prometheus but nothing in Alertmanager** — check the
   `alerting` block in `configs/prometheus.yml` and that `alertmanager` is up.
 - **Visible in Alertmanager, no notification** — expected. The default
@@ -245,10 +245,10 @@ curl -s localhost:9090/api/v1/rules | python3 -m json.tool | head -40
 To force one immediately:
 
 ```bash
-docker compose stop worker
+docker compose stop my_service
 ```
 
-`WorkerDown` goes Pending, then Firing 30s later.
+`MyServiceDown` goes Pending, then Firing 30s later.
 
 ## Everything is slow
 

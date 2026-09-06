@@ -1,6 +1,6 @@
 # monitoring-stack
 
-A small observability stack built around a worker that never stops: it
+A small observability stack built around a my_service that never stops: it
 chews through a job queue in Postgres while metrics, logs and traces flow
 out of it. Each of the three signals can be switched off on its own.
 
@@ -10,10 +10,10 @@ out of it. Each of the three signals can be switched off on its own.
 
 | Service | Role |
 |---|---|
-| **worker** | claims jobs from Postgres, processes them, writes results back |
+| **my_service** | claims jobs from Postgres, processes them, writes results back |
 | **postgres** | holds the `jobs` table |
 | **postgres-exporter** | exposes Postgres' own metrics to Prometheus |
-| **prometheus** | scrapes the worker and the exporter every 5s, evaluates alert rules |
+| **prometheus** | scrapes my_service and the exporter every 5s, evaluates alert rules |
 | **alertmanager** | receives firing alerts, groups them, would notify |
 | **fluent-bit** | receives logs from Docker, forwards them to Loki |
 | **loki** | log storage |
@@ -22,11 +22,11 @@ out of it. Each of the three signals can be switched off on its own.
 | **grafana** | all three datasources and the dashboards, pre-wired |
 
 ```
-metrics   prometheus ──scrape──┬─> worker:8000/metrics
+metrics   prometheus ──scrape──┬─> my_service:8000/metrics
                                ├─> postgres-exporter:9187
                                └──alerts──> alertmanager
 logs      every container ──docker fluentd driver──> fluent-bit ──> loki
-traces    worker ──OTLP──> otel-collector ──> tempo
+traces    my_service ──OTLP──> otel-collector ──> tempo
 ```
 
 The three branches are independent — nothing in one is required by another.
@@ -37,8 +37,18 @@ The three branches are independent — nothing in one is required by another.
 docker compose up --build
 ```
 
-Nothing else to do: the worker starts producing and consuming jobs
+Nothing else to do: my_service starts producing and consuming jobs
 immediately, so there's data in Grafana within seconds.
+
+### One thing is broken on purpose
+
+`job_queue_depth` will climb rather than sit flat, and nothing in the logs
+will say why. That is deliberate: the repository ships a single seeded bug so
+there is a real problem to investigate, not just dashboards to admire. It is
+found by following metric → log → trace → SQL, and fixed with a two-line diff.
+
+[docs/DEMO.md](docs/DEMO.md) is the walkthrough — and it gives the answer away,
+so don't open it in front of an audience you want to let solve it.
 
 First time, or something didn't come up?
 [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through the run and
@@ -55,7 +65,7 @@ API-only — you read them through Grafana.
 | Grafana | http://localhost:3000 | UI — anonymous login, admin role |
 | Prometheus | http://localhost:9090 | UI — `/targets`, `/alerts`, `/rules` |
 | Alertmanager | http://localhost:9093 | UI — alerts that are currently firing |
-| worker | http://localhost:8000/metrics | raw metrics, exactly as Prometheus sees them |
+| my_service | http://localhost:8000/metrics | raw metrics, exactly as Prometheus sees them |
 | postgres-exporter | http://localhost:9187/metrics | Postgres' own metrics |
 | Loki | http://localhost:3100 | API — `/ready`, `/metrics`, `/loki/api/v1/query` |
 | Tempo | http://localhost:3200 | API — `/ready`, `/metrics`, `/api/traces/{id}` |
@@ -69,9 +79,9 @@ Grafana on first start, no import needed:
 
 | Dashboard | What it shows |
 |---|---|
-| **Worker — metrics** | queue depth, throughput by status, failure rate, job and tick latency percentiles, a latency heatmap |
+| **my_service — metrics** | queue depth, throughput by status, failure rate, job and tick latency percentiles, a latency heatmap |
 | **Logs — all containers** | log volume by level and by container, an errors-only panel, and a free-text search over everything |
-| **Traces — worker** | recent traces, traces containing a failed job, slow ticks, slow SQL |
+| **Traces — my_service** | recent traces, traces containing a failed job, slow ticks, slow SQL |
 | **Postgres — database (9628)** | connections, transactions, tuples, locks, bgwriter, cache hit ratio, settings |
 
 The Postgres one is [dashboard 9628](https://grafana.com/grafana/dashboards/9628-postgresql-database/)
@@ -94,9 +104,9 @@ Dashboards are the guided version. **Explore** (the compass icon) is the raw one
 |---|---|---|
 | Prometheus | `job_queue_depth` | the queue rising and draining |
 | Prometheus | `rate(jobs_processed_total[1m])` | throughput, split by status |
-| Loki | `{container_name="worker"}` | the worker's logs |
+| Loki | `{container_name="my_service"}` | the service's logs |
 | Loki | `{job="docker"}` | every container's logs |
-| Tempo | Search, service `worker` | traces of individual ticks |
+| Tempo | Search, service `my_service` | traces of individual ticks |
 
 Expand a `job N failed` line in Loki and click **View Trace** — it jumps
 straight to that job's trace, SQL statements included.
@@ -111,27 +121,27 @@ curl -s localhost:8000/metrics | grep job_queue_depth
 curl -s 'localhost:9090/api/v1/query?query=job_queue_depth' | python3 -m json.tool
 ```
 
-## How the worker works
+## How my_service works
 
 A producer thread keeps adding jobs; the main loop runs a tick every two
 seconds:
 
 1. claim a batch of `pending` jobs and flip them to `processing`
-   (`FOR UPDATE SKIP LOCKED`, so several workers could run side by side)
+   (`FOR UPDATE SKIP LOCKED`, so several instances could run side by side)
 2. process each one — takes a moment, and fails ~5% of the time
 3. write the outcome back as `done` or `failed`
 
 Every tick is one trace: the batch, a span per job, and a span for each SQL
 statement underneath.
 
-Tuning knobs, all environment variables on the `worker` service:
+Tuning knobs, all environment variables on the `my_service` service:
 `BATCH_SIZE`, `TICK_SECONDS`, `FAILURE_RATE`.
 
 ## Metrics
 
 | Metric | Type | What it tells you |
 |---|---|---|
-| `job_queue_depth` | gauge | how far behind the worker is |
+| `job_queue_depth` | gauge | how far behind my_service is |
 | `jobs_processed_total{status}` | counter | throughput, and the failure rate |
 | `jobs_produced_total` | counter | how fast work arrives |
 | `job_duration_seconds` | histogram | per-job latency |
@@ -143,7 +153,7 @@ it — the gauge reacts within seconds.
 Postgres reports on itself through `postgres-exporter` — connections
 (`pg_stat_activity_count`), transaction and rollback rates
 (`pg_stat_database_xact_commit`), cache hit ratio, table and index sizes.
-Handy next to the worker's own numbers: a growing queue with flat
+Handy next to the service's own numbers: a growing queue with flat
 transaction throughput usually means the bottleneck isn't the database.
 
 ## Alerts
@@ -153,19 +163,19 @@ pushes what fires to Alertmanager.
 
 | Alert | Fires when |
 |---|---|
-| `WorkerDown` | `up{job="worker"} == 0` for 30s |
+| `MyServiceDown` | `up{job="my_service"} == 0` for 30s |
 | `QueueBacklog` | `job_queue_depth > 200` for 1m |
 | `HighFailureRate` | more than 20% of jobs fail, over 5m, for 2m |
 | `SlowJobs` | p99 job duration above 1s for 2m |
 | `PostgresDown` | `pg_up == 0` for 30s |
 
-To watch one fire, stop the worker:
+To watch one fire, stop my_service:
 
 ```bash
-docker compose stop worker
+docker compose stop my_service
 ```
 
-`WorkerDown` shows up as *Pending* on http://localhost:9090/alerts, turns
+`MyServiceDown` shows up as *Pending* on http://localhost:9090/alerts, turns
 *Firing* after 30s, and lands in http://localhost:9093 a few seconds later.
 
 The default receiver has no integration, so nothing leaves the machine —
@@ -187,7 +197,7 @@ docker compose stop otel-collector tempo                    # no traces
 docker compose stop prometheus alertmanager postgres-exporter   # no metrics
 ```
 
-The worker keeps running in every case. Logging uses `fluentd-async`, so
+my_service keeps running in every case. Logging uses `fluentd-async`, so
 containers start and stay up even when Fluent Bit isn't there — logs are
 dropped, nothing blocks.
 
@@ -200,8 +210,8 @@ attaches `trace_id` as structured metadata.
 
 ## Correlating logs and traces
 
-Log lines the worker emits inside a tick carry the active `trace_id`
-(see `JsonFormatter` in `app/worker.py`). In Grafana:
+Log lines my_service emits inside a tick carry the active `trace_id`
+(see `JsonFormatter` in `app/my_service.py`). In Grafana:
 
 - **Logs → trace**: open a log line in Explore (Loki), click *View Trace*
 - **Trace → logs**: open a trace in Explore (Tempo), click *Logs for this span*
@@ -214,6 +224,6 @@ ticks up, the log line says which job, and the trace shows the SQL around it.
 1. Point `configs/prometheus.yml` at your service and expose `/metrics`
    from it (use the Prometheus client library for your language).
 2. Send traces to `otel-collector:4317` over OTLP — with an OpenTelemetry
-   SDK, as `app/worker.py` does, or via zero-code auto-instrumentation.
+   SDK, as `app/my_service.py` does, or via zero-code auto-instrumentation.
 3. Log JSON to stdout including `trace_id`, add the same `logging:` block as
    the other services, and logs land in Loki with no further wiring.

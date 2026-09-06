@@ -1,6 +1,6 @@
 {
   "uid": "stack-traces",
-  "title": "Traces — worker",
+  "title": "Traces — my_service",
   "tags": ["monitoring-stack", "traces"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -16,7 +16,7 @@
       "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "Every tick of the worker is one trace:\n\n- `tick` — the whole batch\n- `process-job` — one job\n- `SELECT` / `UPDATE` — one SQL statement\n\nClick any row to open the trace. From a span, **Logs for this span** jumps to the matching lines in Loki.\n\nTempo has no dashboard-friendly aggregates here — the tables below are TraceQL searches, the same ones you would run in Explore."
+        "content": "Every tick of my_service is one trace:\n\n- `tick` — the whole batch\n- `process-job` — one job\n- `SELECT` / `UPDATE` — one SQL statement\n\nClick any row to open the trace. From a span, **Logs for this span** jumps to the matching lines in Loki.\n\nTempo has no dashboard-friendly aggregates here — the tables below are TraceQL searches, the same ones you would run in Explore."
       }
     },
     {
@@ -29,7 +29,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"worker\"}",
+          "query": "{resource.service.name=\"my_service\"}",
           "limit": 20,
           "tableType": "traces"
         }
@@ -41,14 +41,14 @@
       "id": 3,
       "type": "table",
       "title": "Traces with a failed job",
-      "description": "TraceQL filters on span attributes — job.failed is set in app/worker.py.",
+      "description": "TraceQL filters on span attributes — job.failed is set in app/my_service.py.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
       "datasource": { "type": "tempo", "uid": "tempo" },
       "targets": [
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"worker\" && span.job.failed=true}",
+          "query": "{resource.service.name=\"my_service\" && span.job.failed=true}",
           "limit": 20,
           "tableType": "traces"
         }
@@ -67,7 +67,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"worker\" && name=\"tick\" && duration > 1s}",
+          "query": "{resource.service.name=\"my_service\" && name=\"tick\" && duration > 1s}",
           "limit": 20,
           "tableType": "traces"
         }
@@ -86,7 +86,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{resource.service.name=\"worker\" && span.db.system=\"postgresql\" && duration > 5ms}",
+          "query": "{resource.service.name=\"my_service\" && span.db.system=\"postgresql\" && duration > 5ms}",
           "limit": 20,
           "tableType": "traces"
         }

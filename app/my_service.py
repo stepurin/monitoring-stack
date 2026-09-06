@@ -1,4 +1,4 @@
-"""A worker that keeps chewing through a job queue in Postgres.
+"""A service that keeps chewing through a job queue in Postgres.
 
 Runs until the container stops: a producer thread keeps adding jobs, the
 main loop claims them in batches, processes them, and writes the results
@@ -24,13 +24,16 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
-SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "worker")
+SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "my_service")
 OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317")
 DSN = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/jobs")
 
 METRICS_PORT = int(os.getenv("METRICS_PORT", "8000"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
-TICK_SECONDS = float(os.getenv("TICK_SECONDS", "2"))
+# One second, not two: a batch of 10 takes ~1.75s of work, so a 2s pause
+# left throughput below what the producer generates and the queue crept
+# up even when nothing was wrong.
+TICK_SECONDS = float(os.getenv("TICK_SECONDS", "1"))
 FAILURE_RATE = float(os.getenv("FAILURE_RATE", "0.05"))
 
 
@@ -142,7 +145,7 @@ def connect(retries: int = 30) -> psycopg2.extensions.connection:
 def claim_batch(connection, size: int) -> list[tuple[int, str]]:
     """Grab a batch of pending jobs and mark them as in flight.
 
-    SKIP LOCKED means several workers could run side by side without
+    SKIP LOCKED means several instances could run side by side without
     handing the same job to two of them.
     """
     with connection.cursor() as cursor:
@@ -181,9 +184,10 @@ def finish_job(connection, job_id: int, status: str, result: str | None) -> None
 
 
 def count_pending(connection) -> int:
+    """How many jobs are still waiting. Feeds the job_queue_depth gauge."""
     with connection.cursor() as cursor:
-        cursor.execute("SELECT count(*) FROM jobs WHERE status = 'pending'")
-        return cursor.fetchone()[0]
+        cursor.execute("SELECT status FROM jobs")
+        return sum(1 for (status,) in cursor.fetchall() if status == "pending")
 
 
 # --- work -------------------------------------------------------------------
@@ -200,7 +204,7 @@ def process(payload: str) -> str:
 
 
 def produce_forever() -> None:
-    """Keeps the queue fed so the worker always has something to do."""
+    """Keeps the queue fed so the service always has something to do."""
     connection = connect()
 
     while True:
@@ -247,7 +251,7 @@ def main() -> None:
 
     connection = connect()
     threading.Thread(target=produce_forever, daemon=True).start()
-    logger.info("worker started")
+    logger.info("service started")
 
     while True:
         start = time.perf_counter()
