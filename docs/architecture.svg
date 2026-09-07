@@ -21,7 +21,7 @@
   <g filter="url(#wobble)" stroke-linecap="round" stroke-linejoin="round">
 
     <!-- title -->
-    <text x="40" y="62" font-size="42" fill="#5c5c5c">MY MONITORING STAK</text>
+    <text x="40" y="62" font-size="42" fill="#5c5c5c">MY MONITORING STACK</text>
     <path d="M40,78 C 180,88 320,68 468,80" stroke="#5c5c5c" stroke-width="3" fill="none"/>
 
     <!-- sun -->
