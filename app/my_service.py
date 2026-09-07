@@ -262,23 +262,24 @@ def process(payload: str) -> str:
 
 
 def produce_forever() -> None:
-    """Keeps the queue fed so the service always has something to do."""
+    """Keeps the queue fed so the service always has something to do.
+
+    The producer holds one connection for its whole life instead of borrowing
+    from the pool every second. It runs on its own thread at its own pace, and
+    taking a connection from under the tick each time only made the two of them
+    queue for each other.
+    """
+    connection = acquire()
+
     while True:
         count = random.randint(1, 5)
 
         with tracer.start_as_current_span("produce"):
-            connection = acquire()
-
-            try:
-                with connection.cursor() as cursor:
-                    cursor.executemany(
-                        "INSERT INTO jobs (payload) VALUES (%s)",
-                        [(f"task-{random.randint(1000, 9999)}",) for _ in range(count)],
-                    )
-            finally:
-                # Even if the insert raised: a connection that is never given
-                # back is one the pool can never hand out again.
-                release(connection)
+            with connection.cursor() as cursor:
+                cursor.executemany(
+                    "INSERT INTO jobs (payload) VALUES (%s)",
+                    [(f"task-{random.randint(1000, 9999)}",) for _ in range(count)],
+                )
 
         JOBS_PRODUCED.inc(count)
         time.sleep(1)
