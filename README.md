@@ -209,6 +209,100 @@ Log lines my_service emits inside a tick carry the active `trace_id`
 A failed job is the shortest path through all three signals: the counter
 ticks up, the log line says which job, and the trace shows the SQL around it.
 
+## The exercise: a connection leak
+
+The stack ships with a fault in it on purpose. `main` is the broken state,
+`fixed` is the repaired one, and `git diff main fixed` is four lines.
+
+> Spoilers below. If you want to work it out from the dashboards first, stop
+> reading and run the stack.
+
+`measure_backlog()` in `app/my_service.py` takes a connection from the pool
+to read the queue depth and never returns it. One per tick, so the pool only
+grows. Postgres runs with `max_connections=30` here, which puts the ceiling
+about ninety seconds away.
+
+What you see, in the order you tend to see it:
+
+| Signal | What it shows |
+|---|---|
+| Alert | `MyServiceDown` — the process exits with code 1 |
+| Logs | thirty lines of `postgres not ready, retrying (N/30)` |
+| Metrics | connections climbing to the ceiling, `active` flat at 1 |
+| Traces | one failing trace, the last one before the exit |
+
+The logs are the interesting part, because they are wrong. `connect()` cannot
+tell *too many clients already* from *not up yet*, so it reports the latter.
+Postgres never went anywhere — `pg_up` stays at 1 and `PostgresDown` never
+fires. The connections were the service's own, all of them idle.
+
+**Where to look.** The *Connections vs ceiling* panel on the Postgres
+dashboard: a straight climb towards the red dashed line, with the active
+count unmoved. Connections open but doing nothing is the shape of a leak.
+
+**Then the trace.** Retry log lines carry a `trace_id`, so *View Trace* takes
+you to the failing tick: a connection reused in 0.2 ms with `pool.size` at 29,
+ten jobs processed and committed, and a thirty-second red span at the end.
+The work succeeded; the bookkeeping after it could not get a connection.
+Expand the red `pool-acquire`, open **Events**, and the exception names it:
+`psycopg2.OperationalError: FATAL: sorry, too many clients already`.
+
+In TraceQL:
+
+```
+{status = error}                                     the failure
+{name = "pool-acquire" && span.pool.size > 10}       the pool, oversized
+{name = "pool-acquire" && span.pool.reused = false}  who keeps opening new ones
+```
+
+Only the last trace before the exit fails — every tick before it is healthy.
+If you just started the stack, wait for it.
+
+**The fix**, in full:
+
+```python
+    with tracer.start_as_current_span("measure-backlog"):
+        connection = acquire()
+
+        try:
+            return count_pending(connection)
+        finally:
+            release(connection)
+```
+
+`run_tick()` and `produce_forever()` already do this. A connection is
+something you borrow and give back.
+
+### Running it
+
+```bash
+git switch main                          # or: fixed
+docker compose build --no-cache my_service
+docker compose restart postgres
+docker compose up -d --force-recreate my_service
+```
+
+`--no-cache` matters: Docker will happily rebuild the image without noticing
+that the source changed. Check what actually ended up inside the container
+rather than what is on disk:
+
+```bash
+docker compose exec my_service grep -A7 "def measure_backlog" /app/my_service.py
+```
+
+No `release` in that function means the leak is in place.
+
+Watch it go:
+
+```bash
+docker compose exec postgres psql -U postgres -d jobs \
+  -c "SELECT state, count(*) FROM pg_stat_activity WHERE datname='jobs' GROUP BY state"
+```
+
+Open that psql session *before* the connections run out — at the ceiling a new
+one is refused, and `postgres-exporter` loses its slot too, which puts a gap in
+the metric right when you want it.
+
 ## Using it for your own app
 
 1. Point `configs/prometheus.yml` at your service and expose `/metrics`

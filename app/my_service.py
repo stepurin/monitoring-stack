@@ -244,8 +244,18 @@ def measure_backlog() -> int:
     The tick holds its connection for the whole batch, and this is only a
     gauge — no reason to make it wait for the batch to finish.
     """
+    # bug
     with tracer.start_as_current_span("measure-backlog"):
         return count_pending(acquire())
+
+    # fixed section
+    # with tracer.start_as_current_span("measure-backlog"):
+    #     connection = acquire()
+    #
+    #     try:
+    #         return count_pending(connection)
+    #     finally:
+    #         release(connection)
 
 
 # --- work -------------------------------------------------------------------
